@@ -21,10 +21,10 @@ jobs:
           large-packages: true
           swap-storage: true
 
-      - name: Cài đặt các gói phụ thuộc (Dependencies)
+      - name: Cài đặt các gói phụ thuộc (Tương thích Ubuntu 22.04)
         run: |
           sudo apt-get update
-          sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip mtools squashfs-tools python2 python-is-python3
+          sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip mtools squashfs-tools python-is-python3
 
       - name: Tải công cụ Repo của Google
         run: |
@@ -73,7 +73,7 @@ jobs:
           rm -rf packages/apps/Contacts
           rm -rf packages/apps/Calendar
 
-          # 3. Ép chế độ Dark Mode mặc định & Xóa tùy chọn Light Mode (chỉ giữ màu xanh gốc của AOSP)
+          # 3. Ép chế độ Dark Mode mặc định & Xóa tùy chọn Light Mode
           sed -i 's/<integer name="def_ui_night_mode">1<\/integer>/<integer name="def_ui_night_mode">2<\/integer>/g' frameworks/base/packages/SettingsProvider/res/values/defaults.xml
 
           # 4. Thêm Trình duyệt Via
@@ -91,7 +91,7 @@ jobs:
           include $(BUILD_PREBUILT)
           EOF
 
-          # 5. Thêm MinMicroG (Dạng Prebuilt Core) thay thế GApps
+          # 5. Thêm MinMicroG (Dạng Prebuilt Core)
           mkdir -p packages/apps/MicroG
           wget -qO packages/apps/MicroG/GmsCore.apk "https://microg.org/fdroid/repo/com.google.android.gms-240913064.apk"
           cat << 'EOF' > packages/apps/MicroG/Android.mk
@@ -110,10 +110,10 @@ jobs:
           # 6. Thêm AudioFX
           git clone https://github.com/LineageOS/android_packages_apps_AudioFX.git -b lineage-17.1 packages/apps/AudioFX
 
-          # 7. Đăng ký ViaBrowser, GmsCore, AudioFX vào danh sách gói sẽ Build
+          # 7. Đăng ký ViaBrowser, GmsCore, AudioFX vào danh sách Build
           sed -i '/PRODUCT_PACKAGES +=/a \    ViaBrowser \\\n    GmsCore \\\n    AudioFX \\' device/generic/common/x86.mk
 
-          # 8. Tối ưu thuật toán nén SquashFS (Giúp đầu ra < 500MB)
+          # 8. Tối ưu thuật toán nén SquashFS (Thu nhỏ file < 500MB)
           sed -i 's/mksquashfs/mksquashfs -comp xz -b 1048576 -Xdict-size 100%/g' build/make/core/Makefile
           
           echo "--- TÙY CHỈNH HOÀN TẤT ---"
@@ -126,14 +126,14 @@ jobs:
           # Target x86_64, userdebug tự động có Root (su binary)
           lunch android_x86_64-userdebug
           
-          # Vô hiệu hóa dexpreopt để giảm cực mạnh dung lượng system.img
+          # Vô hiệu hóa dexpreopt để giảm dung lượng system.img
           export WITH_DEXPREOPT=false
           
           # Tiến hành build ra file ISO
           make -j$(nproc) iso_img
 
       - name: Đăng tải file ISO (Upload Artifact)
-        uses: actions/upload-artifact@v4 # Đã cập nhật lên v4
+        uses: actions/upload-artifact@v4
         with:
           name: AOSP-10-Lite-x86_64
           path: aosp_build/out/target/product/x86_64/*.iso
