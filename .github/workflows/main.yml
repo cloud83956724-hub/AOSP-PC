@@ -1,0 +1,83 @@
+name: Build AOSP x86-64 UltraLite
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          sudo apt-get clean
+          df -h
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev \
+            gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev \
+            libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
+
+      - name: Install Repo Tool
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Initialize & Sync AOSP-x86 Source
+        run: |
+          mkdir android-x86
+          cd android-x86
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          repo init -u https://osdn.net/projects/android-x86/scm/git/manifest -b android-x86-10.0-r2 --depth=1
+          repo sync -c --no-clone-bundle --no-tags -j$(nproc)
+
+      - name: Apply Customizations (Lite & Dark Mode)
+        run: |
+          cd android-x86
+          
+          # 1. Bỏ bớt App thừa trong target build
+          rm -rf packages/apps/Messaging \
+                 packages/apps/PhoneCommon \
+                 packages/apps/Dialer \
+                 packages/apps/Browser \
+                 packages/apps/Wallpapers \
+                 packages/apps/Backgrounds
+
+          # 2. Ep Chế độ Tối (Force Dark Mode) & Accent Color Xanh
+          # Thay đổi resource overlay mặc định của Framework
+          sed -i 's/<bool name="config_ui_enableThemeOverlay">true<\/bool>/<bool name="config_ui_enableThemeOverlay">false<\/bool>/g' frameworks/base/core/res/res/values/config.xml
+          
+          # 3. Tải Via Browser (APK) làm Trình duyệt mặc định
+          mkdir -p vendor/extra/app/Via
+          curl -sL -o vendor/extra/app/Via/Via.apk https://via-browser.en.uptodown.com/android/download # Hoặc link trực tiếp APK Via
+          
+          cat << 'EOF' > vendor/extra/app/Via/Android.mk
+          LOCAL_PATH := $(call my-dir)
+          include $(CLEAR_VARS)
+          LOCAL_MODULE := Via
+          LOCAL_MODULE_TAGS := optional
+          LOCAL_SRC_FILES := Via.apk
+          LOCAL_MODULE_CLASS := APPS
+          LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
+          LOCAL_CERTIFICATE := PRESIGNED
+          include $(BUILD_PREBUILT)
+          EOF
+
+      - name: Build ISO / Output
+        run: |
+          cd android-x86
+          source build/envsetup.sh
+          lunch android_x86_64-userdebug
+          m -j$(nproc) iso_img
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: AOSP-x86-10-UltraLite
+          path: android-x86/out/target/product/x86_64/*.iso
