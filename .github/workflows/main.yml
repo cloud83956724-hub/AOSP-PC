@@ -35,8 +35,8 @@ jobs:
 
       - name: Kiểm tra mã nguồn (Manifest) trước khi đồng bộ
         run: |
-          echo "Đang kiểm tra kho chứa cấu trúc mã nguồn Android-x86 nhánh 10..."
-          git clone https://github.com/android-x86/manifest.git -b q-x86 /tmp/manifest_check
+          echo "Đang kiểm tra kho chứa cấu trúc mã nguồn Android-x86 nhánh android-10.0-r2..."
+          git clone https://github.com/android-x86/manifest.git -b android-10.0-r2 /tmp/manifest_check
           echo "Cấu trúc thư mục Manifest:"
           ls -la /tmp/manifest_check
           echo "Kiểm tra mã nguồn thành công. Chuẩn bị đồng bộ!"
@@ -48,9 +48,8 @@ jobs:
           git config --global user.name "AOSP Builder"
           git config --global user.email "builder@localhost.com"
           
-          # Khởi tạo repo với độ sâu = 1 để tiết kiệm dung lượng và thời gian
-          repo init -u https://github.com/android-x86/manifest -b q-x86 --depth=1
-          # Đồng bộ mã nguồn
+          # Sử dụng chuẩn nhánh android-10.0-r2 của Android-x86
+          repo init -u https://github.com/android-x86/manifest -b android-10.0-r2 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
       - name: Tùy chỉnh mã nguồn (Cắt giảm, Thêm App, Dark Mode, Ép dung lượng)
