@@ -5,9 +5,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04 # Khuyến cáo dùng self-hosted nếu build free tier bị timeout
+    runs-on: ubuntu-22.04
 
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Giải phóng dung lượng ổ cứng (Tối đa hóa không gian)
         uses: jlumbroso/free-disk-space@main
         with:
@@ -76,7 +79,6 @@ jobs:
           # 4. Thêm Trình duyệt Via
           mkdir -p packages/apps/ViaBrowser
           wget -qO packages/apps/ViaBrowser/Via.apk "https://viabrowser.com/download/Via.apk"
-          # Dùng 'EOF' (có nháy đơn) để Bash không render sai các biến của Makefile
           cat << 'EOF' > packages/apps/ViaBrowser/Android.mk
           LOCAL_PATH := $(call my-dir)
           include $(CLEAR_VARS)
@@ -131,7 +133,7 @@ jobs:
           make -j$(nproc) iso_img
 
       - name: Đăng tải file ISO (Upload Artifact)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # Đã cập nhật lên v4
         with:
           name: AOSP-10-Lite-x86_64
           path: aosp_build/out/target/product/x86_64/*.iso
