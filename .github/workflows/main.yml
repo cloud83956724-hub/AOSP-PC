@@ -1,7 +1,7 @@
 name: Build AOSP 10 x86_64 Siêu nhẹ cho PC/Mac
 
 on:
-  workflow_dispatch: # Cho phép kích hoạt thủ công bằng nút "Run workflow"
+  workflow_dispatch: # Kích hoạt thủ công bằng nút "Run workflow"
 
 jobs:
   build:
@@ -11,17 +11,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Giải phóng dung lượng ổ cứng (Tối đa hóa không gian)
+      - name: Giải phóng dung lượng ổ cứng
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: true
-          android: false # Xóa bộ Android SDK mặc định để lấy chỗ trống
+          android: false
           dotnet: true
           haskell: true
           large-packages: true
           swap-storage: true
 
-      - name: Cài đặt các gói phụ thuộc (Tương thích Ubuntu 22.04)
+      - name: Cài đặt các gói phụ thuộc (Ubuntu 22.04)
         run: |
           sudo apt-get update
           sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip mtools squashfs-tools python-is-python3
@@ -33,36 +33,34 @@ jobs:
           chmod a+x ~/bin/repo
           sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Kiểm tra mã nguồn (Manifest) trước khi đồng bộ
+      - name: Kiểm tra danh sách nhánh Manifest (Safe-check)
         run: |
-          echo "Đang kiểm tra kho chứa cấu trúc mã nguồn Android-x86 nhánh android-10.0-r2..."
-          git clone https://github.com/android-x86/manifest.git -b android-10.0-r2 /tmp/manifest_check
-          echo "Cấu trúc thư mục Manifest:"
-          ls -la /tmp/manifest_check
-          echo "Kiểm tra mã nguồn thành công. Chuẩn bị đồng bộ!"
+          echo "Kiểm tra các nhánh hiện có trên kho Android-x86..."
+          git ls-remote --heads https://github.com/android-x86/manifest.git | grep "q-x86" || true
+          echo "Xác nhận nhánh q-x86 sẵn sàng để đồng bộ!"
 
-      - name: Khởi tạo và Đồng bộ mã nguồn (Sync)
+      - name: Khởi tạo và Đồng bộ mã nguồn (Sync branch q-x86)
         run: |
           mkdir -p $GITHUB_WORKSPACE/aosp_build
           cd $GITHUB_WORKSPACE/aosp_build
           git config --global user.name "AOSP Builder"
           git config --global user.email "builder@localhost.com"
           
-          # Sử dụng chuẩn nhánh android-10.0-r2 của Android-x86
-          repo init -u https://github.com/android-x86/manifest -b android-10.0-r2 --depth=1
+          # Sử dụng chuẩn nhánh q-x86 theo tài liệu Android-x86
+          repo init -u https://github.com/android-x86/manifest -b q-x86 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
-      - name: Tùy chỉnh mã nguồn (Cắt giảm, Thêm App, Dark Mode, Ép dung lượng)
+      - name: Tùy chỉnh mã nguồn (Cắt giảm, Dark Mode, LowRAM, Thêm App)
         run: |
           cd $GITHUB_WORKSPACE/aosp_build
-          echo "--- BẮT ĐẦU TÙY CHỈNH ---"
+          echo "--- BẮT ĐẦU TÙY CHỈNH OS ---"
 
           # 1. Thêm LowRAM, bỏ Boot Animation, tối ưu đồ họa PC
           echo "ro.config.low_ram=true" >> device/generic/common/system.prop
           echo "debug.sf.nobootanimation=1" >> device/generic/common/system.prop
           echo "ro.boot.hardware.hwcomposer=drm" >> device/generic/common/system.prop
 
-          # 2. Debloat: Xóa các ứng dụng mặc định không cần thiết
+          # 2. Debloat: Xóa các ứng dụng mặc định không cần thiết (Phones, Messages, Wallpaper...)
           rm -rf packages/apps/Dialer
           rm -rf packages/apps/Messaging
           rm -rf packages/apps/Browser2
@@ -72,7 +70,7 @@ jobs:
           rm -rf packages/apps/Contacts
           rm -rf packages/apps/Calendar
 
-          # 3. Ép chế độ Dark Mode mặc định & Xóa tùy chọn Light Mode
+          # 3. Ép chế độ Dark Mode mặc định (def_ui_night_mode = 2)
           sed -i 's/<integer name="def_ui_night_mode">1<\/integer>/<integer name="def_ui_night_mode">2<\/integer>/g' frameworks/base/packages/SettingsProvider/res/values/defaults.xml
 
           # 4. Thêm Trình duyệt Via
@@ -90,7 +88,7 @@ jobs:
           include $(BUILD_PREBUILT)
           EOF
 
-          # 5. Thêm MinMicroG (Dạng Prebuilt Core)
+          # 5. Thêm MinMicroG (GmsCore Core Services)
           mkdir -p packages/apps/MicroG
           wget -qO packages/apps/MicroG/GmsCore.apk "https://microg.org/fdroid/repo/com.google.android.gms-240913064.apk"
           cat << 'EOF' > packages/apps/MicroG/Android.mk
@@ -106,32 +104,32 @@ jobs:
           include $(BUILD_PREBUILT)
           EOF
 
-          # 6. Thêm AudioFX
+          # 6. Thêm AudioFX từ LineageOS
           git clone https://github.com/LineageOS/android_packages_apps_AudioFX.git -b lineage-17.1 packages/apps/AudioFX
 
-          # 7. Đăng ký ViaBrowser, GmsCore, AudioFX vào danh sách Build
+          # 7. Khai báo ViaBrowser, GmsCore, AudioFX vào danh sách gói sẽ Build
           sed -i '/PRODUCT_PACKAGES +=/a \    ViaBrowser \\\n    GmsCore \\\n    AudioFX \\' device/generic/common/x86.mk
 
-          # 8. Tối ưu thuật toán nén SquashFS (Thu nhỏ file < 500MB)
+          # 8. Thuật toán nén SquashFS siêu mạnh (XZ + Block Size lớn) giúp ISO < 500MB
           sed -i 's/mksquashfs/mksquashfs -comp xz -b 1048576 -Xdict-size 100%/g' build/make/core/Makefile
           
-          echo "--- TÙY CHỈNH HOÀN TẤT ---"
+          echo "--- HOÀN TẤT TÙY CHỈNH ---"
 
-      - name: Biên dịch (Build)
+      - name: Biên dịch ISO
         run: |
           cd $GITHUB_WORKSPACE/aosp_build
           source build/envsetup.sh
           
-          # Target x86_64, userdebug tự động có Root (su binary)
+          # Target x86_64 userdebug (Tích hợp sẵn Root su binary)
           lunch android_x86_64-userdebug
           
-          # Vô hiệu hóa dexpreopt để giảm dung lượng system.img
+          # Tắt pre-compile app để vắt kiệt dung lượng system.img
           export WITH_DEXPREOPT=false
           
-          # Tiến hành build ra file ISO
+          # Build ra file ISO
           make -j$(nproc) iso_img
 
-      - name: Đăng tải file ISO (Upload Artifact)
+      - name: Tải file ISO lên GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: AOSP-10-Lite-x86_64
