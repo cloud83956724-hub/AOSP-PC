@@ -1,4 +1,4 @@
-name: Build AOSP 10 (Bliss-x86_64) Siêu nhẹ cho PC/Mac
+name: Build BlissOS 14 (Android 11) Siêu nhẹ cho PC/Mac
 
 on:
   workflow_dispatch: # Kích hoạt thủ công bằng nút "Run workflow"
@@ -33,15 +33,15 @@ jobs:
           chmod a+x ~/bin/repo
           sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Khởi tạo và Đồng bộ mã nguồn (BlissRoms-x86 Android 10)
+      - name: Khởi tạo và Đồng bộ mã nguồn (BlissOS 14 - Android 11)
         run: |
           mkdir -p $GITHUB_WORKSPACE/aosp_build
           cd $GITHUB_WORKSPACE/aosp_build
           git config --global user.name "AOSP Builder"
           git config --global user.email "builder@localhost.com"
           
-          # Sử dụng nguồn BlissRoms-x86 chuẩn trên GitHub (nhánh q10.0)
-          repo init -u https://github.com/BlissRoms-x86/manifest.git -b q10.0 --depth=1
+          # Đồng bộ chuẩn nhánh android-11.0 (BlissOS 14) đang sống 100%
+          repo init -u https://github.com/BlissRoms-x86/manifest.git -b android-11.0 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
       - name: Tùy chỉnh mã nguồn (Cắt giảm, Dark Mode, LowRAM, Thêm App)
@@ -49,11 +49,10 @@ jobs:
           cd $GITHUB_WORKSPACE/aosp_build
           echo "--- BẮT ĐẦU TÙY CHỈNH OS ---"
 
-          # 1. Thêm LowRAM, bỏ Boot Animation, tối ưu đồ họa PC
+          # 1. Bật LowRAM, bỏ Boot Animation
           if [ -f device/generic/common/system.prop ]; then
             echo "ro.config.low_ram=true" >> device/generic/common/system.prop
             echo "debug.sf.nobootanimation=1" >> device/generic/common/system.prop
-            echo "ro.boot.hardware.hwcomposer=drm" >> device/generic/common/system.prop
           fi
 
           # 2. Debloat: Xóa các ứng dụng mặc định không cần thiết
@@ -84,7 +83,7 @@ jobs:
           include $(BUILD_PREBUILT)
           EOF
 
-          # 5. Thêm MinMicroG (GmsCore Core Services)
+          # 5. Thêm MinMicroG (GmsCore)
           mkdir -p packages/apps/MicroG
           wget -qO packages/apps/MicroG/GmsCore.apk "https://microg.org/fdroid/repo/com.google.android.gms-240913064.apk"
           cat << 'EOF' > packages/apps/MicroG/Android.mk
@@ -101,14 +100,14 @@ jobs:
           EOF
 
           # 6. Thêm AudioFX
-          git clone https://github.com/LineageOS/android_packages_apps_AudioFX.git -b lineage-17.1 packages/apps/AudioFX || true
+          git clone https://github.com/LineageOS/android_packages_apps_AudioFX.git -b lineage-18.1 packages/apps/AudioFX || true
 
           # 7. Khai báo các gói ứng dụng mới vào build system
           if [ -f device/generic/common/x86.mk ]; then
             sed -i '/PRODUCT_PACKAGES +=/a \    ViaBrowser \\\n    GmsCore \\\n    AudioFX \\' device/generic/common/x86.mk
           fi
 
-          # 8. Cấu hình nén SquashFS xz siêu nén ISO
+          # 8. Cấu hình nén SquashFS xz
           sed -i 's/mksquashfs/mksquashfs -comp xz -b 1048576 -Xdict-size 100%/g' build/make/core/Makefile || true
           
           echo "--- HOÀN TẤT TÙY CHỈNH ---"
@@ -118,8 +117,8 @@ jobs:
           cd $GITHUB_WORKSPACE/aosp_build
           source build/envsetup.sh
           
-          # Target x86_64 userdebug
-          lunch android_x86_64-userdebug || lunch bliss_x86_64-userdebug
+          # Target x86_64 userdebug cho BlissOS
+          lunch bliss_x86_64-userdebug || lunch android_x86_64-userdebug
           
           # Tắt pre-compile app để giảm dung lượng
           export WITH_DEXPREOPT=false
@@ -130,6 +129,6 @@ jobs:
       - name: Tải file ISO lên GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Android-10-Lite-x86_64
+          name: BlissOS-14-Lite-x86_64
           path: aosp_build/out/target/product/*/*.iso
           retention-days: 7
