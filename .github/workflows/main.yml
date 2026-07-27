@@ -21,10 +21,14 @@ jobs:
           large-packages: true
           swap-storage: true
 
-      - name: Cài đặt các gói phụ thuộc (Ubuntu 22.04)
+      - name: Cài đặt đầy đủ các gói phụ thuộc (Bao gồm ISO Tools)
         run: |
           sudo apt-get update
-          sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip mtools squashfs-tools python-is-python3
+          sudo apt-get install -y git-core gnupg flex bison build-essential zip curl \
+            zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses-dev \
+            x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils \
+            xsltproc unzip mtools squashfs-tools python-is-python3 \
+            syslinux-utils genisoimage isolinux bc gettext
 
       - name: Tải công cụ Repo của Google
         run: |
@@ -40,7 +44,7 @@ jobs:
           git config --global user.name "AOSP Builder"
           git config --global user.email "builder@localhost.com"
           
-          # Sử dụng chính xác nhánh r11-x86 (Android 11 / BlissOS 14)
+          # Đồng bộ nhánh r11-x86 (Android 11)
           repo init -u https://github.com/BlissRoms-x86/manifest.git -b r11-x86 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
@@ -63,7 +67,7 @@ jobs:
           # 3. Ép chế độ Dark Mode mặc định
           sed -i 's/<integer name="def_ui_night_mode">1<\/integer>/<integer name="def_ui_night_mode">2<\/integer>/g' frameworks/base/packages/SettingsProvider/res/values/defaults.xml || true
 
-          # 4. Thêm Trình duyệt Via (Dùng curl an toàn)
+          # 4. Thêm Trình duyệt Via
           mkdir -p packages/apps/ViaBrowser
           curl -sSL "https://res.viabrowser.com/vias/Via.apk" -o packages/apps/ViaBrowser/Via.apk || \
           curl -sSL "https://viabrowser.com/download/Via.apk" -o packages/apps/ViaBrowser/Via.apk || true
@@ -82,7 +86,7 @@ jobs:
           EOF
           fi
 
-          # 5. Thêm MicroG GmsCore (Link GitHub Release ổn định)
+          # 5. Thêm MicroG GmsCore
           mkdir -p packages/apps/MicroG
           curl -sSL "https://github.com/microg/GmsCore/releases/download/v0.3.2.240913/com.google.android.gms-240913008.apk" -o packages/apps/MicroG/GmsCore.apk || true
 
@@ -115,9 +119,6 @@ jobs:
           if [ -n "$TARGET_MK" ]; then
             echo "PRODUCT_PACKAGES += ViaBrowser GmsCore AudioFX" >> "$TARGET_MK"
           fi
-
-          # 8. Cấu hình nén SquashFS xz siêu nén ISO
-          sed -i 's/mksquashfs/mksquashfs -comp xz -b 1048576 -Xdict-size 100%/g' build/make/core/Makefile || true
           
           echo "--- HOÀN TẤT TÙY CHỈNH ---"
 
