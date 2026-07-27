@@ -33,21 +33,21 @@ jobs:
           chmod a+x ~/bin/repo
           sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Kiểm tra danh sách nhánh Manifest (Safe-check)
+      - name: Kiểm tra nhánh Manifest trên SourceForge chính thức
         run: |
-          echo "Kiểm tra các nhánh hiện có trên kho Android-x86..."
-          git ls-remote --heads https://github.com/android-x86/manifest.git | grep "q-x86" || true
+          echo "Kiểm tra kết nối tới máy chủ SourceForge của Android-x86..."
+          git ls-remote --heads https://git.code.sf.net/p/android-x86/manifest | grep "q-x86" || true
           echo "Xác nhận nhánh q-x86 sẵn sàng để đồng bộ!"
 
-      - name: Khởi tạo và Đồng bộ mã nguồn (Sync branch q-x86)
+      - name: Khởi tạo và Đồng bộ mã nguồn (Từ SourceForge chính thức)
         run: |
           mkdir -p $GITHUB_WORKSPACE/aosp_build
           cd $GITHUB_WORKSPACE/aosp_build
           git config --global user.name "AOSP Builder"
           git config --global user.email "builder@localhost.com"
           
-          # Sử dụng chuẩn nhánh q-x86 theo tài liệu Android-x86
-          repo init -u https://github.com/android-x86/manifest -b q-x86 --depth=1
+          # Sử dụng URL chính thức của Android-x86 trên SourceForge
+          repo init -u https://git.code.sf.net/p/android-x86/manifest -b q-x86 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
       - name: Tùy chỉnh mã nguồn (Cắt giảm, Dark Mode, LowRAM, Thêm App)
@@ -110,7 +110,7 @@ jobs:
           # 7. Khai báo ViaBrowser, GmsCore, AudioFX vào danh sách gói sẽ Build
           sed -i '/PRODUCT_PACKAGES +=/a \    ViaBrowser \\\n    GmsCore \\\n    AudioFX \\' device/generic/common/x86.mk
 
-          # 8. Thuật toán nén SquashFS siêu mạnh (XZ + Block Size lớn) giúp ISO < 500MB
+          # 8. Thuật toán nén SquashFS xz giúp nén file ISO xuống < 500MB
           sed -i 's/mksquashfs/mksquashfs -comp xz -b 1048576 -Xdict-size 100%/g' build/make/core/Makefile
           
           echo "--- HOÀN TẤT TÙY CHỈNH ---"
@@ -123,10 +123,10 @@ jobs:
           # Target x86_64 userdebug (Tích hợp sẵn Root su binary)
           lunch android_x86_64-userdebug
           
-          # Tắt pre-compile app để vắt kiệt dung lượng system.img
+          # Tắt pre-compile app để tiết kiệm không gian đĩa
           export WITH_DEXPREOPT=false
           
-          # Build ra file ISO
+          # Tiến hành đóng gói ra file ISO
           make -j$(nproc) iso_img
 
       - name: Tải file ISO lên GitHub Artifacts
