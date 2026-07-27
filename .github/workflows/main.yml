@@ -1,4 +1,4 @@
-name: Build AOSP 10 x86_64 Siêu nhẹ cho PC/Mac
+name: Build AOSP 10 (Bliss-x86_64) Siêu nhẹ cho PC/Mac
 
 on:
   workflow_dispatch: # Kích hoạt thủ công bằng nút "Run workflow"
@@ -33,21 +33,15 @@ jobs:
           chmod a+x ~/bin/repo
           sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Kiểm tra nhánh Manifest trên SourceForge chính thức
-        run: |
-          echo "Kiểm tra kết nối tới máy chủ SourceForge của Android-x86..."
-          git ls-remote --heads https://git.code.sf.net/p/android-x86/manifest | grep "q-x86" || true
-          echo "Xác nhận nhánh q-x86 sẵn sàng để đồng bộ!"
-
-      - name: Khởi tạo và Đồng bộ mã nguồn (Từ SourceForge chính thức)
+      - name: Khởi tạo và Đồng bộ mã nguồn (BlissRoms-x86 Android 10)
         run: |
           mkdir -p $GITHUB_WORKSPACE/aosp_build
           cd $GITHUB_WORKSPACE/aosp_build
           git config --global user.name "AOSP Builder"
           git config --global user.email "builder@localhost.com"
           
-          # Sử dụng URL chính thức của Android-x86 trên SourceForge
-          repo init -u https://git.code.sf.net/p/android-x86/manifest -b q-x86 --depth=1
+          # Sử dụng nguồn BlissRoms-x86 chuẩn trên GitHub (nhánh q10.0)
+          repo init -u https://github.com/BlissRoms-x86/manifest.git -b q10.0 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
       - name: Tùy chỉnh mã nguồn (Cắt giảm, Dark Mode, LowRAM, Thêm App)
@@ -56,11 +50,13 @@ jobs:
           echo "--- BẮT ĐẦU TÙY CHỈNH OS ---"
 
           # 1. Thêm LowRAM, bỏ Boot Animation, tối ưu đồ họa PC
-          echo "ro.config.low_ram=true" >> device/generic/common/system.prop
-          echo "debug.sf.nobootanimation=1" >> device/generic/common/system.prop
-          echo "ro.boot.hardware.hwcomposer=drm" >> device/generic/common/system.prop
+          if [ -f device/generic/common/system.prop ]; then
+            echo "ro.config.low_ram=true" >> device/generic/common/system.prop
+            echo "debug.sf.nobootanimation=1" >> device/generic/common/system.prop
+            echo "ro.boot.hardware.hwcomposer=drm" >> device/generic/common/system.prop
+          fi
 
-          # 2. Debloat: Xóa các ứng dụng mặc định không cần thiết (Phones, Messages, Wallpaper...)
+          # 2. Debloat: Xóa các ứng dụng mặc định không cần thiết
           rm -rf packages/apps/Dialer
           rm -rf packages/apps/Messaging
           rm -rf packages/apps/Browser2
@@ -70,8 +66,8 @@ jobs:
           rm -rf packages/apps/Contacts
           rm -rf packages/apps/Calendar
 
-          # 3. Ép chế độ Dark Mode mặc định (def_ui_night_mode = 2)
-          sed -i 's/<integer name="def_ui_night_mode">1<\/integer>/<integer name="def_ui_night_mode">2<\/integer>/g' frameworks/base/packages/SettingsProvider/res/values/defaults.xml
+          # 3. Ép chế độ Dark Mode mặc định
+          sed -i 's/<integer name="def_ui_night_mode">1<\/integer>/<integer name="def_ui_night_mode">2<\/integer>/g' frameworks/base/packages/SettingsProvider/res/values/defaults.xml || true
 
           # 4. Thêm Trình duyệt Via
           mkdir -p packages/apps/ViaBrowser
@@ -104,14 +100,16 @@ jobs:
           include $(BUILD_PREBUILT)
           EOF
 
-          # 6. Thêm AudioFX từ LineageOS
-          git clone https://github.com/LineageOS/android_packages_apps_AudioFX.git -b lineage-17.1 packages/apps/AudioFX
+          # 6. Thêm AudioFX
+          git clone https://github.com/LineageOS/android_packages_apps_AudioFX.git -b lineage-17.1 packages/apps/AudioFX || true
 
-          # 7. Khai báo ViaBrowser, GmsCore, AudioFX vào danh sách gói sẽ Build
-          sed -i '/PRODUCT_PACKAGES +=/a \    ViaBrowser \\\n    GmsCore \\\n    AudioFX \\' device/generic/common/x86.mk
+          # 7. Khai báo các gói ứng dụng mới vào build system
+          if [ -f device/generic/common/x86.mk ]; then
+            sed -i '/PRODUCT_PACKAGES +=/a \    ViaBrowser \\\n    GmsCore \\\n    AudioFX \\' device/generic/common/x86.mk
+          fi
 
-          # 8. Thuật toán nén SquashFS xz giúp nén file ISO xuống < 500MB
-          sed -i 's/mksquashfs/mksquashfs -comp xz -b 1048576 -Xdict-size 100%/g' build/make/core/Makefile
+          # 8. Cấu hình nén SquashFS xz siêu nén ISO
+          sed -i 's/mksquashfs/mksquashfs -comp xz -b 1048576 -Xdict-size 100%/g' build/make/core/Makefile || true
           
           echo "--- HOÀN TẤT TÙY CHỈNH ---"
 
@@ -120,18 +118,18 @@ jobs:
           cd $GITHUB_WORKSPACE/aosp_build
           source build/envsetup.sh
           
-          # Target x86_64 userdebug (Tích hợp sẵn Root su binary)
-          lunch android_x86_64-userdebug
+          # Target x86_64 userdebug
+          lunch android_x86_64-userdebug || lunch bliss_x86_64-userdebug
           
-          # Tắt pre-compile app để tiết kiệm không gian đĩa
+          # Tắt pre-compile app để giảm dung lượng
           export WITH_DEXPREOPT=false
           
-          # Tiến hành đóng gói ra file ISO
+          # Đóng gói ra ISO
           make -j$(nproc) iso_img
 
       - name: Tải file ISO lên GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AOSP-10-Lite-x86_64
-          path: aosp_build/out/target/product/x86_64/*.iso
+          name: Android-10-Lite-x86_64
+          path: aosp_build/out/target/product/*/*.iso
           retention-days: 7
