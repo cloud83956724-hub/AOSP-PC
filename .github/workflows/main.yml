@@ -33,15 +33,15 @@ jobs:
           chmod a+x ~/bin/repo
           sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Khởi tạo và Đồng bộ mã nguồn (BlissOS 14 - Android 11)
+      - name: Khởi tạo và Đồng bộ mã nguồn (BlissOS 14 - Nhánh r11-x86)
         run: |
           mkdir -p $GITHUB_WORKSPACE/aosp_build
           cd $GITHUB_WORKSPACE/aosp_build
           git config --global user.name "AOSP Builder"
           git config --global user.email "builder@localhost.com"
           
-          # Đồng bộ chuẩn nhánh android-11.0 (BlissOS 14) đang sống 100%
-          repo init -u https://github.com/BlissRoms-x86/manifest.git -b android-11.0 --depth=1
+          # Sử dụng chính xác nhánh r11-x86 (Android 11 / BlissOS 14)
+          repo init -u https://github.com/BlissRoms-x86/manifest.git -b r11-x86 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
       - name: Tùy chỉnh mã nguồn (Cắt giảm, Dark Mode, LowRAM, Thêm App)
@@ -92,7 +92,6 @@ jobs:
           LOCAL_MODULE := GmsCore
           LOCAL_MODULE_TAGS := optional
           LOCAL_SRC_FILES := GmsCore.apk
-          LOCAL_MODULE_CLASS := APPS
           LOCAL_PRIVILEGED_MODULE := true
           LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
           LOCAL_CERTIFICATE := PRESIGNED
@@ -107,7 +106,7 @@ jobs:
             sed -i '/PRODUCT_PACKAGES +=/a \    ViaBrowser \\\n    GmsCore \\\n    AudioFX \\' device/generic/common/x86.mk
           fi
 
-          # 8. Cấu hình nén SquashFS xz
+          # 8. Cấu hình nén SquashFS xz siêu nén ISO
           sed -i 's/mksquashfs/mksquashfs -comp xz -b 1048576 -Xdict-size 100%/g' build/make/core/Makefile || true
           
           echo "--- HOÀN TẤT TÙY CHỈNH ---"
@@ -120,7 +119,7 @@ jobs:
           # Target x86_64 userdebug cho BlissOS
           lunch bliss_x86_64-userdebug || lunch android_x86_64-userdebug
           
-          # Tắt pre-compile app để giảm dung lượng
+          # Tắt pre-compile app để tiết kiệm bộ nhớ
           export WITH_DEXPREOPT=false
           
           # Đóng gói ra ISO
