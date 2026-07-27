@@ -36,17 +36,17 @@ jobs:
           for CMD in /usr/bin/7z /usr/bin/7za; do
             if [ -f "$CMD" ] && [ ! -f "$CMD.real" ]; then
               sudo mv "$CMD" "$CMD.real"
-              cat << 'EOF' | sudo tee "$CMD"
-#!/bin/bash
-TARGET_BIN="$0.real"
-"$TARGET_BIN" "$@"
-STATUS=$?
-if [ $STATUS -eq 1 ]; then
-  echo "--> [Wrapper 7z] Phát hiện cảnh báo (Exit Code 1), bỏ qua để tiếp tục build..."
-  exit 0
-fi
-exit $STATUS
-EOF
+              sudo tee "$CMD" > /dev/null << 'EOF'
+          #!/bin/bash
+          TARGET_BIN="$0.real"
+          "$TARGET_BIN" "$@"
+          STATUS=$?
+          if [ $STATUS -eq 1 ]; then
+            echo "--> [Wrapper 7z] Phát hiện cảnh báo (Exit Code 1), bỏ qua để tiếp tục build..."
+            exit 0
+          fi
+          exit $STATUS
+          EOF
               sudo chmod +x "$CMD"
             fi
           done
