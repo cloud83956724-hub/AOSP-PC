@@ -56,22 +56,20 @@ jobs:
           fi
 
           # 2. Debloat: Xóa các ứng dụng mặc định không cần thiết
-          rm -rf packages/apps/Dialer
-          rm -rf packages/apps/Messaging
-          rm -rf packages/apps/Browser2
-          rm -rf packages/apps/WallpaperPicker
-          rm -rf packages/apps/WallpaperPicker2
-          rm -rf packages/apps/Camera2
-          rm -rf packages/apps/Contacts
-          rm -rf packages/apps/Calendar
+          rm -rf packages/apps/Dialer packages/apps/Messaging packages/apps/Browser2 \
+                 packages/apps/WallpaperPicker packages/apps/WallpaperPicker2 \
+                 packages/apps/Camera2 packages/apps/Contacts packages/apps/Calendar || true
 
           # 3. Ép chế độ Dark Mode mặc định
           sed -i 's/<integer name="def_ui_night_mode">1<\/integer>/<integer name="def_ui_night_mode">2<\/integer>/g' frameworks/base/packages/SettingsProvider/res/values/defaults.xml || true
 
-          # 4. Thêm Trình duyệt Via
+          # 4. Thêm Trình duyệt Via (Dùng curl an toàn)
           mkdir -p packages/apps/ViaBrowser
-          wget -qO packages/apps/ViaBrowser/Via.apk "https://viabrowser.com/download/Via.apk"
-          cat << 'EOF' > packages/apps/ViaBrowser/Android.mk
+          curl -sSL "https://res.viabrowser.com/vias/Via.apk" -o packages/apps/ViaBrowser/Via.apk || \
+          curl -sSL "https://viabrowser.com/download/Via.apk" -o packages/apps/ViaBrowser/Via.apk || true
+
+          if [ -s packages/apps/ViaBrowser/Via.apk ]; then
+            cat << 'EOF' > packages/apps/ViaBrowser/Android.mk
           LOCAL_PATH := $(call my-dir)
           include $(CLEAR_VARS)
           LOCAL_MODULE := ViaBrowser
@@ -82,28 +80,40 @@ jobs:
           LOCAL_CERTIFICATE := PRESIGNED
           include $(BUILD_PREBUILT)
           EOF
+          fi
 
-          # 5. Thêm MinMicroG (GmsCore)
+          # 5. Thêm MicroG GmsCore (Link GitHub Release ổn định)
           mkdir -p packages/apps/MicroG
-          wget -qO packages/apps/MicroG/GmsCore.apk "https://microg.org/fdroid/repo/com.google.android.gms-240913064.apk"
-          cat << 'EOF' > packages/apps/MicroG/Android.mk
+          curl -sSL "https://github.com/microg/GmsCore/releases/download/v0.3.2.240913/com.google.android.gms-240913008.apk" -o packages/apps/MicroG/GmsCore.apk || true
+
+          if [ -s packages/apps/MicroG/GmsCore.apk ]; then
+            cat << 'EOF' > packages/apps/MicroG/Android.mk
           LOCAL_PATH := $(call my-dir)
           include $(CLEAR_VARS)
           LOCAL_MODULE := GmsCore
           LOCAL_MODULE_TAGS := optional
           LOCAL_SRC_FILES := GmsCore.apk
+          LOCAL_MODULE_CLASS := APPS
           LOCAL_PRIVILEGED_MODULE := true
           LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
           LOCAL_CERTIFICATE := PRESIGNED
           include $(BUILD_PREBUILT)
           EOF
+          fi
 
           # 6. Thêm AudioFX
           git clone https://github.com/LineageOS/android_packages_apps_AudioFX.git -b lineage-18.1 packages/apps/AudioFX || true
 
           # 7. Khai báo các gói ứng dụng mới vào build system
+          TARGET_MK=""
           if [ -f device/generic/common/x86.mk ]; then
-            sed -i '/PRODUCT_PACKAGES +=/a \    ViaBrowser \\\n    GmsCore \\\n    AudioFX \\' device/generic/common/x86.mk
+            TARGET_MK="device/generic/common/x86.mk"
+          elif [ -f vendor/bliss/config/common.mk ]; then
+            TARGET_MK="vendor/bliss/config/common.mk"
+          fi
+
+          if [ -n "$TARGET_MK" ]; then
+            echo "PRODUCT_PACKAGES += ViaBrowser GmsCore AudioFX" >> "$TARGET_MK"
           fi
 
           # 8. Cấu hình nén SquashFS xz siêu nén ISO
