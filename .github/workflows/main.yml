@@ -31,17 +31,22 @@ jobs:
             syslinux-utils genisoimage isolinux bc gettext p7zip-full p7zip-rar \
             xorriso grub-pc-bin grub-efi-amd64-bin
 
-      - name: Bọc lỗi 7-Zip đa tầng (Multi-layer 7-Zip Wrapper)
+      - name: Bọc lỗi 7-Zip triệt để (Universal 7-Zip Wrapper)
         run: |
-          echo "=== BẮT ĐẦU BỌC LỖI 7-ZIP ==="
+          echo "=== BẮT ĐẦU BỌC LỖI 7-ZIP TRIỆT ĐỂ ==="
           
-          # 1. Đổi tên tất cả binary gốc sang .real
-          for BIN in /usr/bin/7z /usr/bin/7za /usr/bin/7zr /usr/lib/p7zip/7z /usr/lib/p7zip/7za /usr/lib/p7zip/7zr; do
-            if [ -f "$BIN" ] && [ ! -L "$BIN" ] && [ ! -f "$BIN.real" ]; then
-              sudo mv "$BIN" "$BIN.real"
-              sudo tee "$BIN" > /dev/null << 'EOF'
+          # 1. Đổi tên nhân thực thi gốc trong /usr/lib/p7zip/ sang .real
+          if [ -f /usr/lib/p7zip/7z ] && [ ! -f /usr/lib/p7zip/7z.real ]; then
+            sudo mv /usr/lib/p7zip/7z /usr/lib/p7zip/7z.real
+          fi
+          if [ -f /usr/lib/p7zip/7za ] && [ ! -f /usr/lib/p7zip/7za.real ]; then
+            sudo mv /usr/lib/p7zip/7za /usr/lib/p7zip/7za.real
+          fi
+
+          # 2. Tạo Wrapper đè trực tiếp nhân 7z gốc
+          sudo tee /usr/lib/p7zip/7z > /dev/null << 'EOF'
           #!/bin/bash
-          "$0.real" "$@"
+          /usr/lib/p7zip/7z.real "$@"
           RET=$?
           if [ $RET -eq 1 ]; then
             echo "--> [7-Zip Wrapper System] Bỏ qua Warning Exit Code 1 -> Chuyển thành 0"
@@ -49,40 +54,28 @@ jobs:
           fi
           exit $RET
           EOF
-              sudo chmod +x "$BIN"
-              echo "Đã bọc: $BIN"
-            fi
-          done
+          sudo chmod +x /usr/lib/p7zip/7z
 
-          # 2. Tạo wrapper ưu tiên cao nhất tại /usr/local/bin
-          for CMD in 7z 7za 7zr p7zip; do
-            sudo tee "/usr/local/bin/$CMD" > /dev/null << 'EOF'
+          # 3. Tạo Wrapper đè trực tiếp nhân 7za gốc
+          sudo tee /usr/lib/p7zip/7za > /dev/null << 'EOF'
           #!/bin/bash
-          REAL_BIN=""
-          if [ -f /usr/lib/p7zip/7z.real ]; then REAL_BIN="/usr/lib/p7zip/7z.real"
-          elif [ -f /usr/bin/7z.real ]; then REAL_BIN="/usr/bin/7z.real"
-          else REAL_BIN="$(which 7z.real 2>/dev/null || echo /usr/bin/7z)"
-          fi
-
-          "$REAL_BIN" "$@"
+          /usr/lib/p7zip/7za.real "$@"
           RET=$?
           if [ $RET -eq 1 ]; then
-            echo "--> [7-Zip Local Wrapper] Bỏ qua Warning Exit Code 1 -> Chuyển thành 0"
+            echo "--> [7-Zip Wrapper System] Bỏ qua Warning Exit Code 1 -> Chuyển thành 0"
             exit 0
           fi
           exit $RET
           EOF
-            sudo chmod +x "/usr/local/bin/$CMD"
-          done
+          sudo chmod +x /usr/lib/p7zip/7za
+
           echo "=== HOÀN TẤT BỌC LỖI 7-ZIP ==="
 
       - name: Kiểm tra thử nghiệm 7-Zip Wrapper (Self-Test Step)
         run: |
-          echo "Đang thử nghiệm giả lập cảnh báo 7-Zip..."
-          # Kiểm tra xem các đường dẫn 7z đều đang trỏ vào wrapper
-          which 7z
-          /usr/bin/7z --help > /dev/null
-          echo "Kiểm tra 7-Zip Wrapper thành công!"
+          echo "Đang thử nghiệm giả lập lệnh 7z..."
+          7z --help > /dev/null
+          echo "Wrapper đã hoạt động chính xác!"
 
       - name: Tải công cụ Repo của Google
         run: |
@@ -175,12 +168,6 @@ jobs:
           fi
           
           echo "--- HOÀN TẤT TÙY CHỈNH ---"
-
-      - name: Sửa các script giải nén trong mã nguồn (Patch Sub-scripts)
-        run: |
-          cd $GITHUB_WORKSPACE/aosp_build
-          # Tìm các file script gọi 7z trong thư mục bootable/aaropa và ép trả về exit 0 nếu gặp cảnh báo
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/7z x /7z x -y /g' {} + || true
 
       - name: Biên dịch ISO
         run: |
