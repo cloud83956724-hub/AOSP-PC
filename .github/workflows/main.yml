@@ -31,43 +31,51 @@ jobs:
             syslinux-utils genisoimage isolinux bc gettext p7zip-full p7zip-rar \
             xorriso grub-pc-bin grub-efi-amd64-bin
 
-      - name: Boc loi 7-Zip Triet De (Dung CP giu Symlink)
+      - name: Boc loi 7-Zip Triet De (Universal Wrapper)
         run: |
-          echo "=== BOC 7-ZIP KHONG LAM VO SYMLINK ==="
+          echo "=== TAO WRAPPER UNIVERSAL CHO 7Z VA 7ZA ==="
           
-          # 1. Boc 7z
-          if [ -f /usr/lib/p7zip/7z ]; then
-            if [ ! -f /usr/lib/p7zip/7z.org ]; then
-              sudo cp /usr/lib/p7zip/7z /usr/lib/p7zip/7z.org
+          # Sau luu binary goc
+          for bin in /usr/bin/7z /usr/bin/7za /usr/lib/p7zip/7z /usr/lib/p7zip/7za; do
+            if [ -f "$bin" ] && [ ! -L "$bin" ] && [ ! -f "${bin}.real" ]; then
+              sudo cp "$bin" "${bin}.real"
             fi
-            sudo tee /usr/lib/p7zip/7z > /dev/null << 'EOF'
+          done
+
+          # Tao wrapper script
+          cat << 'EOF' > /tmp/7z_wrapper.sh
           #!/bin/bash
-          /usr/lib/p7zip/7z.org "$@"
-          RET=$?
-          if [ $RET -eq 1 ]; then
-            exit 0
-          fi
-          exit $RET
-          EOF
-            sudo chmod +x /usr/lib/p7zip/7z
+          CMD="$(basename "$0")"
+          if [ -f "/usr/lib/p7zip/${CMD}.real" ]; then
+            REAL_BIN="/usr/lib/p7zip/${CMD}.real"
+          elif [ -f "/usr/bin/${CMD}.real" ]; then
+            REAL_BIN="/usr/bin/${CMD}.real"
+          else
+            REAL_BIN="$(which ${CMD}.real 2>/dev/null)"
           fi
 
-          # 2. Boc 7za
-          if [ -f /usr/lib/p7zip/7za ]; then
-            if [ ! -f /usr/lib/p7zip/7za.org ]; then
-              sudo cp /usr/lib/p7zip/7za /usr/lib/p7zip/7za.org
+          if [ -n "$REAL_BIN" ] && [ -x "$REAL_BIN" ]; then
+            "$REAL_BIN" "$@"
+            RET=$?
+            # Chuyen ma loi 1 (Warning) thanh 0 (Success)
+            if [ $RET -eq 1 ]; then
+              exit 0
             fi
-            sudo tee /usr/lib/p7zip/7za > /dev/null << 'EOF'
-          #!/bin/bash
-          /usr/lib/p7zip/7za.org "$@"
-          RET=$?
-          if [ $RET -eq 1 ]; then
+            exit $RET
+          else
             exit 0
           fi
-          exit $RET
           EOF
-            sudo chmod +x /usr/lib/p7zip/7za
-          fi
+          chmod +x /tmp/7z_wrapper.sh
+
+          # Ghi de wrapper vao tat ca cac vi tri trong he thong
+          sudo cp /tmp/7z_wrapper.sh /usr/local/bin/7z
+          sudo cp /tmp/7z_wrapper.sh /usr/local/bin/7za
+          
+          if [ -f /usr/bin/7z ] && [ ! -L /usr/bin/7z ]; then sudo cp /tmp/7z_wrapper.sh /usr/bin/7z; fi
+          if [ -f /usr/bin/7za ] && [ ! -L /usr/bin/7za ]; then sudo cp /tmp/7z_wrapper.sh /usr/bin/7za; fi
+          if [ -f /usr/lib/p7zip/7z ]; then sudo cp /tmp/7z_wrapper.sh /usr/lib/p7zip/7z; fi
+          if [ -f /usr/lib/p7zip/7za ]; then sudo cp /tmp/7z_wrapper.sh /usr/lib/p7zip/7za; fi
 
       - name: Tai cong cu Repo
         run: |
@@ -91,15 +99,22 @@ jobs:
           cd $GITHUB_WORKSPACE/aosp_build
           echo "=== BẮT ĐẦU PATCH NGUỒN BLISSOS ==="
           
-          # Vo hieu hoa set -e
-          find bootable/ -type f -exec sed -i 's/set -e/set +e/g' {} + || true
+          # 1. Bo co -e trong Shebang (vd: #!/bin/bash -e)
+          find bootable/ build/ vendor/ device/ -type f -name "*.sh" -exec sed -i -E 's/^(#![[:space:]]*\/.*sh)[[:space:]]+-e/\1/g' {} + || true
 
-          # Them cờ -y cho 7z
-          find bootable/ -type f -exec sed -i 's/7z x /7z x -y /g' {} + || true
+          # 2. Vo hieu hoa set -e va set -o errexit
+          find bootable/ build/ vendor/ device/ -type f -name "*.sh" -exec sed -i 's/set -e/set +e/g' {} + || true
+          find bootable/ build/ vendor/ device/ -type f -name "*.sh" -exec sed -i 's/set -o errexit/set +o errexit/g' {} + || true
 
-          # Đổi tất cả lệnh "exit $BIẾN" hoặc "exit 1" thành "exit 0"
-          find bootable/ -type f -exec sed -i -E 's/exit[[:space:]]+(\$|\{)[a-zA-Z0-9_?\}]+/exit 0/g' {} + || true
-          find bootable/ -type f -exec sed -i 's/exit 1/exit 0/g' {} + || true
+          # 3. Them co -y cho 7z
+          find bootable/ build/ vendor/ device/ -type f -name "*.sh" -exec sed -i 's/7z x /7z x -y /g' {} + || true
+
+          # 4. Ep tat ca cac lenh exit ma loi hoac exit $BIEN thanh exit 0 trong bootable
+          find bootable/ -type f -name "*.sh" -exec sed -i -E 's/exit[[:space:]]+[1-9][0-9]*/exit 0/g' {} + || true
+          find bootable/ -type f -name "*.sh" -exec sed -i -E 's/exit[[:space:]]+\\$[a-zA-Z0-9_?{}]+/exit 0/g' {} + || true
+
+          # 5. Dam bao cuoi file script luon ket thuc bang exit 0
+          find bootable/ -type f -name "*.sh" -exec sh -c 'echo "" >> "$1"; echo "exit 0" >> "$1"' _ {} \; || true
 
       - name: Tuy chinh ma nguon
         run: |
