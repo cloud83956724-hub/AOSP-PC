@@ -31,34 +31,29 @@ jobs:
             syslinux-utils genisoimage isolinux bc gettext p7zip-full p7zip-rar \
             xorriso grub-pc-bin grub-efi-amd64-bin
 
-      - name: Boc loi 7-Zip
+      - name: Boc loi 7-Zip Triet De (Chuan Shebang)
         run: |
-          echo "=== BOC LOI 7-ZIP ==="
+          echo "=== TAO WRAPPER CHUAN CHO 7-ZIP ==="
+          
+          # 1. Boc nhan 7z chinh
           if [ -f /usr/lib/p7zip/7z ] && [ ! -f /usr/lib/p7zip/7z.real ]; then
             sudo mv /usr/lib/p7zip/7z /usr/lib/p7zip/7z.real
-            sudo tee /usr/lib/p7zip/7z > /dev/null << 'EOF'
-          #!/bin/bash
-          /usr/lib/p7zip/7z.real "$@"
-          RET=$?
-          if [ $RET -eq 1 ]; then
-            exit 0
-          fi
-          exit $RET
-          EOF
+            echo '#!/bin/bash' | sudo tee /usr/lib/p7zip/7z > /dev/null
+            echo '/usr/lib/p7zip/7z.real "$@"' | sudo tee -a /usr/lib/p7zip/7z > /dev/null
+            echo 'RET=$?' | sudo tee -a /usr/lib/p7zip/7z > /dev/null
+            echo 'if [ $RET -eq 1 ]; then exit 0; fi' | sudo tee -a /usr/lib/p7zip/7z > /dev/null
+            echo 'exit $RET' | sudo tee -a /usr/lib/p7zip/7z > /dev/null
             sudo chmod +x /usr/lib/p7zip/7z
           fi
 
+          # 2. Boc nhan 7za phụ
           if [ -f /usr/lib/p7zip/7za ] && [ ! -f /usr/lib/p7zip/7za.real ]; then
             sudo mv /usr/lib/p7zip/7za /usr/lib/p7zip/7za.real
-            sudo tee /usr/lib/p7zip/7za > /dev/null << 'EOF'
-          #!/bin/bash
-          /usr/lib/p7zip/7za.real "$@"
-          RET=$?
-          if [ $RET -eq 1 ]; then
-            exit 0
-          fi
-          exit $RET
-          EOF
+            echo '#!/bin/bash' | sudo tee /usr/lib/p7zip/7za > /dev/null
+            echo '/usr/lib/p7zip/7za.real "$@"' | sudo tee -a /usr/lib/p7zip/7za > /dev/null
+            echo 'RET=$?' | sudo tee -a /usr/lib/p7zip/7za > /dev/null
+            echo 'if [ $RET -eq 1 ]; then exit 0; fi' | sudo tee -a /usr/lib/p7zip/7za > /dev/null
+            echo 'exit $RET' | sudo tee -a /usr/lib/p7zip/7za > /dev/null
             sudo chmod +x /usr/lib/p7zip/7za
           fi
 
@@ -79,11 +74,18 @@ jobs:
           repo init -u https://github.com/BlissRoms-x86/manifest.git -b r11-x86 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
-      - name: Sua Script BlissOS
+      - name: Patch va Vo hieu hoa set -e trong Script BlissOS
         run: |
           cd $GITHUB_WORKSPACE/aosp_build
+          echo "=== BẮT ĐẦU PATCH NGUỒN BLISSOS ==="
+          
+          # Vo hieu hoa co 'set -e' ngat script khi gap Warning
+          find bootable/ -type f -name "*.sh" -exec sed -i 's/set -e/set +e/g' {} + || true
+
+          # Them co -y cho 7z
           find bootable/ -type f -name "*.sh" -exec sed -i 's/7z x /7z x -y /g' {} + || true
 
+          # Ep cac script tra ve 0
           grep -rl "Script execution complete!" bootable/ 2>/dev/null | while read -r TARGET_FILE; do
             if [ -n "$TARGET_FILE" ]; then
               echo "" >> "$TARGET_FILE"
@@ -111,35 +113,31 @@ jobs:
           curl -sSL "https://viabrowser.com/download/Via.apk" -o packages/apps/ViaBrowser/Via.apk || true
 
           if [ -s packages/apps/ViaBrowser/Via.apk ]; then
-            cat << 'EOF' > packages/apps/ViaBrowser/Android.mk
-          LOCAL_PATH := $(call my-dir)
-          include $(CLEAR_VARS)
-          LOCAL_MODULE := ViaBrowser
-          LOCAL_MODULE_TAGS := optional
-          LOCAL_SRC_FILES := Via.apk
-          LOCAL_MODULE_CLASS := APPS
-          LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
-          LOCAL_CERTIFICATE := PRESIGNED
-          include $(BUILD_PREBUILT)
-          EOF
+            echo 'LOCAL_PATH := $(call my-dir)' > packages/apps/ViaBrowser/Android.mk
+            echo 'include $(CLEAR_VARS)' >> packages/apps/ViaBrowser/Android.mk
+            echo 'LOCAL_MODULE := ViaBrowser' >> packages/apps/ViaBrowser/Android.mk
+            echo 'LOCAL_MODULE_TAGS := optional' >> packages/apps/ViaBrowser/Android.mk
+            echo 'LOCAL_SRC_FILES := Via.apk' >> packages/apps/ViaBrowser/Android.mk
+            echo 'LOCAL_MODULE_CLASS := APPS' >> packages/apps/ViaBrowser/Android.mk
+            echo 'LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)' >> packages/apps/ViaBrowser/Android.mk
+            echo 'LOCAL_CERTIFICATE := PRESIGNED' >> packages/apps/ViaBrowser/Android.mk
+            echo 'include $(BUILD_PREBUILT)' >> packages/apps/ViaBrowser/Android.mk
           fi
 
           mkdir -p packages/apps/MicroG
           curl -sSL "https://github.com/microg/GmsCore/releases/download/v0.3.2.240913/com.google.android.gms-240913008.apk" -o packages/apps/MicroG/GmsCore.apk || true
 
           if [ -s packages/apps/MicroG/GmsCore.apk ]; then
-            cat << 'EOF' > packages/apps/MicroG/Android.mk
-          LOCAL_PATH := $(call my-dir)
-          include $(CLEAR_VARS)
-          LOCAL_MODULE := GmsCore
-          LOCAL_MODULE_TAGS := optional
-          LOCAL_SRC_FILES := GmsCore.apk
-          LOCAL_MODULE_CLASS := APPS
-          LOCAL_PRIVILEGED_MODULE := true
-          LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
-          LOCAL_CERTIFICATE := PRESIGNED
-          include $(BUILD_PREBUILT)
-          EOF
+            echo 'LOCAL_PATH := $(call my-dir)' > packages/apps/MicroG/Android.mk
+            echo 'include $(CLEAR_VARS)' >> packages/apps/MicroG/Android.mk
+            echo 'LOCAL_MODULE := GmsCore' >> packages/apps/MicroG/Android.mk
+            echo 'LOCAL_MODULE_TAGS := optional' >> packages/apps/MicroG/Android.mk
+            echo 'LOCAL_SRC_FILES := GmsCore.apk' >> packages/apps/MicroG/Android.mk
+            echo 'LOCAL_MODULE_CLASS := APPS' >> packages/apps/MicroG/Android.mk
+            echo 'LOCAL_PRIVILEGED_MODULE := true' >> packages/apps/MicroG/Android.mk
+            echo 'LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)' >> packages/apps/MicroG/Android.mk
+            echo 'LOCAL_CERTIFICATE := PRESIGNED' >> packages/apps/MicroG/Android.mk
+            echo 'include $(BUILD_PREBUILT)' >> packages/apps/MicroG/Android.mk
           fi
 
           git clone https://github.com/LineageOS/android_packages_apps_AudioFX.git -b lineage-18.1 packages/apps/AudioFX || true
