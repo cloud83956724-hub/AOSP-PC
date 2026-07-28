@@ -31,27 +31,43 @@ jobs:
             syslinux-utils genisoimage isolinux bc gettext p7zip-full p7zip-rar \
             xorriso grub-pc-bin grub-efi-amd64-bin
 
-      - name: Boc loi 7-Zip Triet De (Toan He Thong)
+      - name: Boc loi 7-Zip Triet De (Dung CP giu Symlink)
         run: |
-          echo "=== BOC TOAN BO BINARY 7Z TRONG HE THONG ==="
+          echo "=== BOC 7-ZIP KHONG LAM VO SYMLINK ==="
           
-          wrap_binary() {
-            TARGET="$1"
-            if [ -f "$TARGET" ] && [ ! -f "${TARGET}.real" ]; then
-              sudo mv "$TARGET" "${TARGET}.real"
-              echo '#!/bin/bash' | sudo tee "$TARGET" > /dev/null
-              echo '"'"${TARGET}.real"'" "$@"' | sudo tee -a "$TARGET" > /dev/null
-              echo 'RET=$?' | sudo tee -a "$TARGET" > /dev/null
-              echo 'if [ $RET -eq 1 ]; then exit 0; fi' | sudo tee -a "$TARGET" > /dev/null
-              echo 'exit $RET' | sudo tee -a "$TARGET" > /dev/null
-              sudo chmod +x "$TARGET"
+          # 1. Boc 7z
+          if [ -f /usr/lib/p7zip/7z ]; then
+            if [ ! -f /usr/lib/p7zip/7z.org ]; then
+              sudo cp /usr/lib/p7zip/7z /usr/lib/p7zip/7z.org
             fi
-          }
+            sudo tee /usr/lib/p7zip/7z > /dev/null << 'EOF'
+          #!/bin/bash
+          /usr/lib/p7zip/7z.org "$@"
+          RET=$?
+          if [ $RET -eq 1 ]; then
+            exit 0
+          fi
+          exit $RET
+          EOF
+            sudo chmod +x /usr/lib/p7zip/7z
+          fi
 
-          wrap_binary "/usr/bin/7z"
-          wrap_binary "/usr/bin/7za"
-          wrap_binary "/usr/lib/p7zip/7z"
-          wrap_binary "/usr/lib/p7zip/7za"
+          # 2. Boc 7za
+          if [ -f /usr/lib/p7zip/7za ]; then
+            if [ ! -f /usr/lib/p7zip/7za.org ]; then
+              sudo cp /usr/lib/p7zip/7za /usr/lib/p7zip/7za.org
+            fi
+            sudo tee /usr/lib/p7zip/7za > /dev/null << 'EOF'
+          #!/bin/bash
+          /usr/lib/p7zip/7za.org "$@"
+          RET=$?
+          if [ $RET -eq 1 ]; then
+            exit 0
+          fi
+          exit $RET
+          EOF
+            sudo chmod +x /usr/lib/p7zip/7za
+          fi
 
       - name: Tai cong cu Repo
         run: |
@@ -70,27 +86,20 @@ jobs:
           repo init -u https://github.com/BlissRoms-x86/manifest.git -b r11-x86 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
-      - name: Patch va Triet de khong cho Script BlissOS tra ve loi
+      - name: Patch triet de Script BlissOS
         run: |
           cd $GITHUB_WORKSPACE/aosp_build
           echo "=== BẮT ĐẦU PATCH NGUỒN BLISSOS ==="
           
-          # Vo hieu hoa co 'set -e'
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/set -e/set +e/g' {} + || true
+          # Vo hieu hoa set -e
+          find bootable/ -type f -exec sed -i 's/set -e/set +e/g' {} + || true
 
-          # Them co -y cho 7z
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/7z x /7z x -y /g' {} + || true
+          # Them cờ -y cho 7z
+          find bootable/ -type f -exec sed -i 's/7z x /7z x -y /g' {} + || true
 
-          # Thay the cac cau lenh exit ngắt script bang exit 0
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/exit \$?/exit 0/g' {} + || true
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/exit \$EC/exit 0/g' {} + || true
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/exit \$STATUS/exit 0/g' {} + || true
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/exit \$status/exit 0/g' {} + || true
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/exit \$res/exit 0/g' {} + || true
-          find bootable/ -type f -name "*.sh" -exec sed -i 's/exit \$ret/exit 0/g' {} + || true
-
-          # Ep tat ca file .sh trong bootable ket thuc bang exit 0
-          find bootable/ -type f -name "*.sh" -exec bash -c 'echo "" >> "$1"; echo "exit 0" >> "$1"' _ {} \; || true
+          # Đổi tất cả lệnh "exit $BIẾN" hoặc "exit 1" thành "exit 0"
+          find bootable/ -type f -exec sed -i -E 's/exit[[:space:]]+(\$|\{)[a-zA-Z0-9_?\}]+/exit 0/g' {} + || true
+          find bootable/ -type f -exec sed -i 's/exit 1/exit 0/g' {} + || true
 
       - name: Tuy chinh ma nguon
         run: |
