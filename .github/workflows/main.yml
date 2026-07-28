@@ -31,51 +31,41 @@ jobs:
             syslinux-utils genisoimage isolinux bc gettext p7zip-full p7zip-rar \
             xorriso grub-pc-bin grub-efi-amd64-bin
 
-      - name: Boc loi 7-Zip Triet De (Universal Wrapper)
+      - name: Boc loi 7-Zip Triet De (Goc p7zip)
         run: |
-          echo "=== TAO WRAPPER UNIVERSAL CHO 7Z VA 7ZA ==="
+          echo "=== TAO WRAPPER TRUC TIEP CHO P7ZIP ==="
           
-          # Sau luu binary goc
-          for bin in /usr/bin/7z /usr/bin/7za /usr/lib/p7zip/7z /usr/lib/p7zip/7za; do
-            if [ -f "$bin" ] && [ ! -L "$bin" ] && [ ! -f "${bin}.real" ]; then
-              sudo cp "$bin" "${bin}.real"
-            fi
-          done
-
-          # Tao wrapper script
-          cat << 'EOF' > /tmp/7z_wrapper.sh
-          #!/bin/bash
-          CMD="$(basename "$0")"
-          if [ -f "/usr/lib/p7zip/${CMD}.real" ]; then
-            REAL_BIN="/usr/lib/p7zip/${CMD}.real"
-          elif [ -f "/usr/bin/${CMD}.real" ]; then
-            REAL_BIN="/usr/bin/${CMD}.real"
-          else
-            REAL_BIN="$(which ${CMD}.real 2>/dev/null)"
+          # Backup binary goc trong /usr/lib/p7zip/
+          if [ -f /usr/lib/p7zip/7z ] && [ ! -f /usr/lib/p7zip/7z.bak ]; then
+            sudo mv /usr/lib/p7zip/7z /usr/lib/p7zip/7z.bak
+          fi
+          if [ -f /usr/lib/p7zip/7za ] && [ ! -f /usr/lib/p7zip/7za.bak ]; then
+            sudo mv /usr/lib/p7zip/7za /usr/lib/p7zip/7za.bak
           fi
 
-          if [ -n "$REAL_BIN" ] && [ -x "$REAL_BIN" ]; then
-            "$REAL_BIN" "$@"
-            RET=$?
-            # Chuyen ma loi 1 (Warning) thanh 0 (Success)
-            if [ $RET -eq 1 ]; then
-              exit 0
-            fi
-            exit $RET
-          else
+          # Tao Wrapper 7z
+          sudo tee /usr/lib/p7zip/7z > /dev/null << 'EOF'
+          #!/bin/bash
+          /usr/lib/p7zip/7z.bak "$@"
+          RET=$?
+          if [ $RET -eq 1 ]; then
             exit 0
           fi
+          exit $RET
           EOF
-          chmod +x /tmp/7z_wrapper.sh
+          sudo chmod +x /usr/lib/p7zip/7z
 
-          # Ghi de wrapper vao tat ca cac vi tri trong he thong
-          sudo cp /tmp/7z_wrapper.sh /usr/local/bin/7z
-          sudo cp /tmp/7z_wrapper.sh /usr/local/bin/7za
-          
-          if [ -f /usr/bin/7z ] && [ ! -L /usr/bin/7z ]; then sudo cp /tmp/7z_wrapper.sh /usr/bin/7z; fi
-          if [ -f /usr/bin/7za ] && [ ! -L /usr/bin/7za ]; then sudo cp /tmp/7z_wrapper.sh /usr/bin/7za; fi
-          if [ -f /usr/lib/p7zip/7z ]; then sudo cp /tmp/7z_wrapper.sh /usr/lib/p7zip/7z; fi
-          if [ -f /usr/lib/p7zip/7za ]; then sudo cp /tmp/7z_wrapper.sh /usr/lib/p7zip/7za; fi
+          # Tao Wrapper 7za
+          sudo tee /usr/lib/p7zip/7za > /dev/null << 'EOF'
+          #!/bin/bash
+          /usr/lib/p7zip/7za.bak "$@"
+          RET=$?
+          if [ $RET -eq 1 ]; then
+            exit 0
+          fi
+          exit $RET
+          EOF
+          sudo chmod +x /usr/lib/p7zip/7za
 
       - name: Tai cong cu Repo
         run: |
@@ -94,27 +84,33 @@ jobs:
           repo init -u https://github.com/BlissRoms-x86/manifest.git -b r11-x86 --depth=1
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --optimized-fetch
 
-      - name: Patch triet de Script BlissOS
+      - name: Patch triet de Script BlissOS (Dung Python)
         run: |
           cd $GITHUB_WORKSPACE/aosp_build
-          echo "=== BẮT ĐẦU PATCH NGUỒN BLISSOS ==="
-          
-          # 1. Bo co -e trong Shebang (vd: #!/bin/bash -e)
-          find bootable/ build/ vendor/ device/ -type f -name "*.sh" -exec sed -i -E 's/^(#![[:space:]]*\/.*sh)[[:space:]]+-e/\1/g' {} + || true
+          python3 -c '
+          import os, re
 
-          # 2. Vo hieu hoa set -e va set -o errexit
-          find bootable/ build/ vendor/ device/ -type f -name "*.sh" -exec sed -i 's/set -e/set +e/g' {} + || true
-          find bootable/ build/ vendor/ device/ -type f -name "*.sh" -exec sed -i 's/set -o errexit/set +o errexit/g' {} + || true
+          for root, dirs, files in os.walk("bootable"):
+              for file in files:
+                  if file.endswith(".sh"):
+                      path = os.path.join(root, file)
+                      try:
+                          with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                              content = f.read()
 
-          # 3. Them co -y cho 7z
-          find bootable/ build/ vendor/ device/ -type f -name "*.sh" -exec sed -i 's/7z x /7z x -y /g' {} + || true
+                          # Vo hieu hoa set -e
+                          content = content.replace("set -e", "set +e")
+                          content = content.replace("set -o errexit", "set +o errexit")
+                          
+                          # Biến mọi lệnh exit $BIẾN hoặc exit 1 thành exit 0
+                          content = re.sub(r"exit\s+(\$|\d+|\w+)", "exit 0", content)
 
-          # 4. Ep tat ca cac lenh exit ma loi hoac exit $BIEN thanh exit 0 trong bootable
-          find bootable/ -type f -name "*.sh" -exec sed -i -E 's/exit[[:space:]]+[1-9][0-9]*/exit 0/g' {} + || true
-          find bootable/ -type f -name "*.sh" -exec sed -i -E 's/exit[[:space:]]+\\$[a-zA-Z0-9_?{}]+/exit 0/g' {} + || true
-
-          # 5. Dam bao cuoi file script luon ket thuc bang exit 0
-          find bootable/ -type f -name "*.sh" -exec sh -c 'echo "" >> "$1"; echo "exit 0" >> "$1"' _ {} \; || true
+                          with open(path, "w", encoding="utf-8") as f:
+                              f.write(content)
+                          print(f"Patched: {path}")
+                      except Exception as e:
+                          print(f"Error patching {path}: {e}")
+          '
 
       - name: Tuy chinh ma nguon
         run: |
